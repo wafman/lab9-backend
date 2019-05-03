@@ -1,63 +1,79 @@
-# lab9-backend
+# lab-09-back-end
+backEnd
+
+
+# Project Name
+
+**Author**: Saurav and William
+**Version**: 4.0.0 
+
+## Overview
+This application will convert a location entered by the user into a latitude and longitude, then use those values to request weather information for that location. 
+
+## Getting Started
+User sends the requests.
+Application recives the requests.
+Find the correct output and
+Send the response back 
+
+## Architecture
+HTMl, CSS, vanilla JS, SQL, and jQuery
+
+## Change Log
+3 May 0900 : setting up the repo
+
+         0930: 2. Locations, so that when user enter the name of a 
+         location, the latitude and longitude will be displayed.
+
+         11:20: Deployed our link to Heruko https://stark-caverns-17950.herokuapp.com/location
+
+         11:30: Deployed our link to Heruko https://stark-caverns-17950.herokuapp.com/weather
+         finished 3rd Task.
+         
+         12:00 finished the error handling . Deployed link to heroku 
+         https://stark-caverns-17950.herokuapp.com/
 
 # lab8-backend
 
-**Author**: William Fritts and Saurav Kadariya
-**Version**: 1.0.0 (increment the patch/fix version number if you make more commits past your first submission)
+Number and name of feature: Repository Set up
 
-## Overview
-<!-- Provide a high level overview of what this application is and why you are building it, beyond the fact that it's an assignment for this class. (i.e. What's your problem domain?) -->
-This application is designed for a user to input their location and be able to see a map of that location, the current weather, and local events. 
+Estimate of time needed to complete: 1 hour
 
-## Getting Started
-<!-- What are the steps that a user must take in order to build this app on their own machine and get it running? -->
-Fork the repo.
+Start time: 9:00am
 
+Finish time: 9:30am
 
-## Architecture
-<!-- Provide a detailed description of the application design. What technologies (languages, libraries, etc) you're using, and any other relevant design information. -->
-
-## Change Log
-
-Number and name of feature: 
-
-Estimate of time needed to complete: 
-
-Start time: 
-
-Finish time: 
-
-Actual time needed to complete:  
+Actual time needed to complete: 30 minutes
 
 
-Number and name of feature: 
+Number and name of feature: Locations
 
-Estimate of time needed to complete: 
+Estimate of time needed to complete: 1 hour
 
-Start time:
+Start time: 9:30am
 
-Finish time: 
+Finish time: 11:30
 
-Actual time needed to complete: 
-
-
-Number and name of feature: 
-
-Estimate of time needed to complete: 
-
-Start time:
-
-Finish time: 
-
-Actual time needed to complete: 
+Actual time needed to complete: 2 hours
 
 
-Number and name of feature: 
+Number and name of feature: Weather
 
-Estimate of time needed to complete: 
+Estimate of time needed to complete: 1 hour
 
-Start time:
+Start time: 11:00
 
-Finish time: 
+Finish time: 12:30
 
-Actual time needed to complete: 
+Actual time needed to complete: 1 hour 30 minutes
+
+
+Number and name of feature: EventBrite
+
+Estimate of time needed to complete: 1 hour
+
+Start time: 11:45am
+
+Finish time: 12:45pm
+
+Actual time needed to complete: 1 hour
