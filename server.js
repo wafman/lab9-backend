@@ -222,16 +222,42 @@ app.get('/movies',(request,response) =>{
 });
 //YELP API
 app.get('/yelp', (request,response) => {
-  let url = `https://api.yelp.com/v3/businesses/search?location=${city.search_query}`;
-  superagent.get(url).set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
-    .end( (err,yelpRes) => {
-      let data = yelpRes.body.businesses;
-      //name,image_url,price,rating,url
-      let yelp = data.map( (ele) => new Yelp(ele.name,ele.image_url,ele.price,ele.rating,ele.url));
-      //console.log('Going Front END: ',yelp);
-      response.send(yelp);
-      
-    });
+  try{
+    //name,image_url,price,rating,url
+    let sqlStatement = 'SELECT * FROM yelp WHERE latitude =$1 and longitude =$2;';
+    let values = [city.latitude,city.longitude];
+    client.query(sqlStatement,values)
+      .then( (data) =>{
+        if(data.rows > 0 ){
+          //name,image_url,price,rating,url
+          let yelp = data.rows.map(ele=> new Yelp(ele.name, ele.image_url, ele.price, ele.rating,ele.url));
+          //console.log('Old Events',event);
+          response.send(yelp);
+        }//if data
+        else{
+          let url = `https://api.yelp.com/v3/businesses/search?location=${city.search_query}`;
+          superagent.get(url).set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+            .end( (err,yelpRes) => {
+              let data = yelpRes.body.businesses;
+              //name,image_url,price,rating,url
+              let yelp = data.map( (ele) => new Yelp(ele.name,ele.image_url,ele.price,ele.rating,ele.url));
+              //console.log('Going Front END: ',yelp);
+              //putting data in DB
+              yelp.forEach( ele=> {
+                // Data going from DB://name,image_url,price,rating,url, lat, long
+                let insertStatement = 'INSERT INTO yelp (name, image_url, price, rating, url,latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7);';
+                let insertValues = [ele.name, ele.image_url, ele.price, ele.rating, ele.url, city.latitude, city.longitude];
+                client.query(insertStatement,insertValues);
+              });//forEach to insert into db
+              response.send(yelp);
+            });//.end super-agent
+          //name,image_url,price,rating,url
+        }//no data in DB
+      });//.then from query
+  }//try end
+  catch(error){
+    console.log('Error is from yelp section: ', error);
+  } // catch end
 });
 //Handling all the paths
 app.use('*', (request, response) => response.send('Sorry, that route does not exist.'));
