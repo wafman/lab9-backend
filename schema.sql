@@ -2,6 +2,7 @@ DROP TABLE location;
 DROP TABLE weather ; 
 DROP TABLE events; 
 DROP TABLE movies;
+DROP TABLE yelp;
 
 CREATE TABLE location(
   latitude DECIMAL,
@@ -18,7 +19,7 @@ CREATE TABLE weather(
 CREATE TABLE events(
   link VARCHAR(255),
   eventName VARCHAR(255),
-  eventDate DATE,
+  eventDate VARCHAR(255),
   summary VARCHAR(255),
   latitude DECIMAL,
   longitude DECIMAL
@@ -32,6 +33,16 @@ CREATE TABLE movies(
   popularity DECIMAL,
   image_url VARCHAR(255),
   overview TEXT,
+  latitude DECIMAL,
+  longitude DECIMAL
+);
+CREATE TABLE yelp (
+  --name,image_url,price,rating,url
+  name VARCHAR(50),
+  image_url VARCHAR(100),
+  price VARCHAR(10),
+  rating DECIMAL,
+  url VARCHAR(255),
   latitude DECIMAL,
   longitude DECIMAL
 );
