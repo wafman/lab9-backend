@@ -51,14 +51,22 @@ function handleError(err,res) {
   }
 }
 //Movies
-function Movies(title, released_on,total_votes,average_votes,popularity, img_url,overview){
+function Movies(title, released_on,total_votes,average_votes,popularity, image_url,overview){
   this.title = title;
   this.released_on = released_on;
   this.total_votes = total_votes;
   this.average_votes = average_votes;
   this.popularity = popularity;
-  this.img_url = img_url;
+  this.image_url = image_url;
   this.overview = overview;
+}
+//Yelp
+function Yelp(name,image_url,price,rating,url){
+  this.name = name;
+  this.image_url = image_url;
+  this.price = price;
+  this.rating = rating;
+  this.url = url;
 }
 //checking to see if the servre is working
 app.get('/', (request, response) => {
@@ -176,20 +184,55 @@ app.get('/events',(request,response)=>{
 });
 //Movie DB
 app.get('/movies',(request,response) =>{
-  //console.log('Our query',city.search_query);
-  let url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${city.search_query}&page=1&include_adult=false`;
+  try{
+    let sqlStatement = 'SELECT * FROM movies WHERE latitude =$1 and longitude =$2;';
+    let values = [city.latitude,city.longitude];
+    client.query(sqlStatement,values)
+      .then( (data) =>{
+        if(data.rows > 0 ){
+          // Data coming from DB: title, released_on,total_votes,average_votes,popularity, img_url,overview
+          let movies = data.rows.map(ele=> new Event(ele.title,ele.released_on,ele.total_votes,ele.average_votes,ele.popularity,ele.image_url,ele.overview));
+          //console.log('Old Events',event);
+          response.send(movies);
+        }
+        else{
+          let url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${city.search_query}&page=1&include_adult=false`;
 
-  superagent.get(url)
-    .end( (err,movieResponse) => {
-      let data = movieResponse.body.results;
-      let movies = [];
-      data.forEach( (ele) => movies.push(new Movies(ele.title,ele.release_date,ele.vote_count,ele.vote_average,ele.popularity,ele.backdrop_path,ele.overview))
-      );
-      response.send(movies);
-    });
+          superagent.get(url)
+            .end( (err,movieResponse) => {
+              let data = movieResponse.body.results;
+              let movies = data.map( (ele) => new Movies(ele.title,ele.release_date,ele.vote_count,ele.vote_average,ele.popularity,'https://image.tmdb.org/t/p/w185_and_h278_bestv2'+ele.backdrop_path,ele.overview)
+              );
+              //console.log(movies);
+              //putting data in DB
+              movies.forEach( ele=> {
+                // Data going from DB: title, released_on, total_votes, average_votes, popularity, image_url, overview, latitude, longitude
+                let insertStatement = 'INSERT INTO movies (title, released_on, total_votes, average_votes,popularity, image_url,overview, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);';
+                let insertValues = [ele.title, ele.released_on, ele.total_votes, ele.average_votes,ele.popularity, ele.image_url, ele.overview, city.latitude, city.longitude];
+                client.query(insertStatement,insertValues);
+              });//forEach to insert into db
+              response.send(movies);
+            });//.end of super agent
+        }// else no data then we inserting into DB
+      }); // .then after the query
+  }//try end
+  catch(error){
+    console.log('In movies , error is : ', error);
+  }
 });
 //YELP API
-
+app.get('/yelp', (request,response) => {
+  let url = `https://api.yelp.com/v3/businesses/search?location=${city.search_query}`;
+  superagent.get(url).set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+    .end( (err,yelpRes) => {
+      let data = yelpRes.body.businesses;
+      //name,image_url,price,rating,url
+      let yelp = data.map( (ele) => new Yelp(ele.name,ele.image_url,ele.price,ele.rating,ele.url));
+      //console.log('Going Front END: ',yelp);
+      response.send(yelp);
+      
+    });
+});
 //Handling all the paths
 app.use('*', (request, response) => response.send('Sorry, that route does not exist.'));
 //Listening to the port
