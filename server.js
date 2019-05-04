@@ -30,11 +30,12 @@ function GEOloc(query, fmtQ, lat, long) {
 
 }
 //constructor for weather
-function Forecast(forecast, time,long,lat) {
+function Forecast(forecast, time,lat,long,created_at) {
   this.forecast = forecast;
   this.time = time;
-  this.longitude = long;
   this.latitude = lat;
+  this.longitude = long;
+  this.created_at = created_at;
 }
 //constructor for eventsdemo
 function Event(link,name,event_date,summary,long,lat){
@@ -44,11 +45,6 @@ function Event(link,name,event_date,summary,long,lat){
   this.summary = summary;
   this.longitude = long;
   this.latitude = lat;
-}
-//Error Handler
-function handleError(err,res) {
-  if (res) { res.status(500).send('Sorry, something went wrong');
-  }
 }
 //Movies
 function Movies(title, released_on,total_votes,average_votes,popularity, image_url,overview){
@@ -68,6 +64,72 @@ function Yelp(name,image_url,price,rating,url){
   this.rating = rating;
   this.url = url;
 }
+
+/* all the functions */
+//Error Handler
+function handleError(err,res) {
+  if (res) { res.status(500).send('Sorry, something went wrong');
+  }
+}
+// delete the table
+const delRowData = (tableName) =>{
+  let sql = `DELETE FROM ${tableName} WHERE latitude =$1 and longitude =$2;`;
+  let value  = [city.latitude,city.longitude];
+  client.query(sql,value);
+  console.log('Delete succesfull');
+};
+//Call api and enter new Data
+const enterNewData = (tableName,data) =>{
+  //console.log(data);
+  let row =  Object.values(data[0]);
+  let valuesString = '';
+  if(row.length===5){
+    valuesString='$1,$2,$3,$4,$5';
+  }
+  let sql = `INSERT INTO ${tableName} VALUES (${valuesString});`;
+  data.forEach( (ele) => {
+    let values=[];
+    row =  Object.values(ele);
+    row.forEach( rEle => {
+      values.push(rEle);
+    });//read all the data for that object
+    //console.log('BData1', valuesArr);
+    client.query(sql,values);
+  });
+  console.log('Inserted new data in DB');
+};
+//check to see if it time yet
+const timeCheck = (tableName,dataCreated) =>{
+  //weather API gets called every 30 sec
+  const weatherTimeOut = 30* 1000;
+  //movie API gets called every week
+  const movieTimeOut = 7 * 24 * 60 * 60* 1000;
+  //movie API gets called every hour
+  const yelpTimeOut = 60 * 60 * 1000;
+  let rightNow = Date.now();
+  let timeOut;
+  //based on the table we select correct timeout value
+  if(tableName ==='weather') {
+    timeOut = weatherTimeOut;
+  }
+  else if(tableName==='movie'){
+    timeOut = movieTimeOut
+  }
+  else{
+    timeout = yelpTimeOut;
+  }
+  //
+  console.log(tableName);
+  console.log(rightNow);
+  console.log(dataCreated);
+  console.log(timeOut);
+  if(rightNow - dataCreated > timeOut){
+    return true;
+  }
+  else{
+    return false;
+  }
+};
 //checking to see if the servre is working
 app.get('/', (request, response) => {
   response.send('server works');
@@ -112,11 +174,38 @@ app.get('/weather', (request, response) => {
     client.query(sqlStatement,values)
       .then( (data) =>{
         if( (data.rowCount) > 0){
-          let weather = data.rows.map(ele=> new Forecast(ele.forcast,ele.timet,ele.latitude,ele.longitude));
-          //console.log('oldWeather', weather);
-          response.send(weather);
-        }
+          //checking to see if data is with the time frame
+          if(timeCheck('weather',data.rows[0].created_at)){
+            //if it has passed the time frame, get new data from API
+            //delete previous data
+            console.log('Deleting old weather DB');
+            delRowData('weather');
+            //get new data
+            let geoCodeURL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${city.latitude},${city.longitude}`;
+            let myForecast;
+            //console.log('newWeather');
+            superagent.get(geoCodeURL).end( (err, googleAPIresponse) => {
+              let data = googleAPIresponse.body;
+              let daily = Object.entries(data)[6];
+              let dailyData = daily[1].data;//hourly day forecast
+              myForecast = dailyData.map(element => {
+                let date = new Date(element.time * 1000).toDateString();
+                return new Forecast(element.summary, date, city.latitude, city.longitude, Date.now());
+              });
+              //update the database with new data
+              enterNewData('weather',myForecast);
+              //send data to front-end
+              response.send(myForecast);
+            });
+          }//else we just show values from DB
+          else{
+            let weather = data.rows.map(ele=> new Forecast(ele.forecast,ele.time,ele.latitude,ele.longitude));
+            //console.log('oldWeather', weather);
+            response.send(weather);
+          }//else
+        }//if there is no data in DB
         else{
+          console.log('we deleting new db1');
           let geoCodeURL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${city.latitude},${city.longitude}`;
           //console.log('newWeather');
           superagent.get(geoCodeURL).end( (err, googleAPIresponse) => {
@@ -125,11 +214,12 @@ app.get('/weather', (request, response) => {
             let dailyData = daily[1].data;//hourly day forecast
             let myForecast = dailyData.map(element => {
               let date = new Date(element.time * 1000).toDateString();
-              return new Forecast(element.summary, date,city.longitude,city.latitude);
+              //forecast,time,long,lat,created_time
+              return new Forecast(element.summary, date, city.latitude, city.longitude, Date.now());
             });
             myForecast.forEach(ele=> {
-              let insertStatement = 'INSERT INTO weather ( forcast,timeT,latitude,longitude) VALUES ($1,$2,$3,$4);';
-              let insertValues = [ele.forecast,ele.time,ele.latitude,ele.longitude];
+              let insertStatement = 'INSERT INTO weather ( forecast,time,latitude,longitude,created_at) VALUES ($1,$2,$3,$4,$5);';
+              let insertValues = [ele.forecast, ele.time, ele.latitude, ele.longitude, Date.now()];
               client.query(insertStatement,insertValues);
             });
             response.send(myForecast);
@@ -138,7 +228,7 @@ app.get('/weather', (request, response) => {
       });
   }
   catch (error) {
-    handleError(error);
+    console.log('Error on weather, error:  ', error);
   }
 });
 //EventBrite
