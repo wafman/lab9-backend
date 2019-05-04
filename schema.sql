@@ -11,10 +11,11 @@ CREATE TABLE location(
   search_query VARCHAR(255)
 );
 CREATE TABLE weather(
-  forcast VARCHAR(255),
-  timeT VARCHAR(255),
+  forecast VARCHAR(255),
+  time VARCHAR(255),
   latitude DECIMAL,
-  longitude DECIMAL
+  longitude DECIMAL,
+  created_at BIGINT
 );
 CREATE TABLE events(
   link VARCHAR(255),
