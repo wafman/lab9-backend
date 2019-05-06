@@ -23,11 +23,12 @@ CREATE TABLE events(
   eventDate VARCHAR(255),
   summary VARCHAR(255),
   latitude DECIMAL,
-  longitude DECIMAL
+  longitude DECIMAL,
+  created_at BIGINT
 );
 CREATE TABLE movies(
   --title, released_on, total_votes, average_votes, popularity, image_url, overview, latitude, longitude
-  title VARCHAR(50),
+  title VARCHAR(150),
   released_on VARCHAR(20),
   total_votes DECIMAL,
   average_votes DECIMAL,
@@ -35,15 +36,17 @@ CREATE TABLE movies(
   image_url VARCHAR(255),
   overview TEXT,
   latitude DECIMAL,
-  longitude DECIMAL
+  longitude DECIMAL,
+  created_at BIGINT
 );
 CREATE TABLE yelp (
   --name,image_url,price,rating,url
-  name VARCHAR(50),
+  name VARCHAR(150),
   image_url VARCHAR(100),
   price VARCHAR(10),
   rating DECIMAL,
   url VARCHAR(255),
   latitude DECIMAL,
-  longitude DECIMAL
+  longitude DECIMAL,
+  created_at BIGINT
 );
