@@ -1,3 +1,4 @@
+/*Author : Saurav */
 'use strict';
 
 require('dotenv').config();
@@ -38,16 +39,17 @@ function Forecast(forecast, time,lat,long,created_at) {
   this.created_at = created_at;
 }
 //constructor for eventsdemo
-function Event(link,name,event_date,summary,long,lat){
+function Event(link,name,event_date,summary,lat,long,created_at){
   this.link = link;
   this.name = name;
   this.event_date = event_date;
   this.summary = summary;
-  this.longitude = long;
   this.latitude = lat;
+  this.longitude = long;
+  this.created_at = created_at;
 }
 //Movies
-function Movies(title, released_on,total_votes,average_votes,popularity, image_url,overview){
+function Movies(title, released_on,total_votes,average_votes,popularity, image_url,overview,lat,long,created_at){
   this.title = title;
   this.released_on = released_on;
   this.total_votes = total_votes;
@@ -55,53 +57,82 @@ function Movies(title, released_on,total_votes,average_votes,popularity, image_u
   this.popularity = popularity;
   this.image_url = image_url;
   this.overview = overview;
+  this.latitude = lat;
+  this.longitude = long;
+  this.created_at = created_at;
 }
 //Yelp
-function Yelp(name,image_url,price,rating,url){
+function Yelp(name,image_url,price,rating,url,lat,long,created_at){
   this.name = name;
   this.image_url = image_url;
   this.price = price;
   this.rating = rating;
   this.url = url;
+  this.latitude = lat;
+  this.longitude = long;
+  this.created_at = created_at;
 }
 
-/* all the functions */
-//Error Handler
-function handleError(err,res) {
-  if (res) { res.status(500).send('Sorry, something went wrong');
-  }
-}
-// delete the table
+/* all the functions
+********************
+*/
+/* delete the table
+********************
+*/
 const delRowData = (tableName) =>{
   let sql = `DELETE FROM ${tableName} WHERE latitude =$1 and longitude =$2;`;
   let value  = [city.latitude,city.longitude];
   client.query(sql,value);
-  console.log('Delete succesfull');
+  console.log('Delete succesfull for ', tableName);
 };
-//Call api and enter new Data
-const enterNewData = (tableName,data) =>{
-  //console.log(data);
-  let row =  Object.values(data[0]);
-  let valuesString = '';
-  if(row.length===5){
-    valuesString='$1,$2,$3,$4,$5';
+/*correct value string to have to enter data properly on DB based on table structure
+********************
+*/
+const valueString = (tableName) =>{
+  let string = '';
+  if(tableName === 'location'){
+    string = '$1,$2,$3,$4';
   }
+  else if(tableName === 'weather'){
+    string = '$1,$2,$3,$4,$5';
+  }
+  else if(tableName==='events'){
+    string = '$1,$2,$3,$4,$5,$6,$7';
+  }
+  else if(tableName === 'movies'){
+    string = '$1,$2,$3,$4,$5,$6,$7,$8,$9,$10';
+  }
+  else if (tableName === 'yelp'){
+    string ='$1,$2,$3,$4,$5,$6,$7,$8';
+  }
+  return string;
+};
+/*Called api , got new data NOW => enter new Data into DB
+********************
+*/
+const enterNewData = (tableName,data) =>{
+  console.log('In enterNewData from - ', tableName);
+  let valuesString = valueString(tableName);
   let sql = `INSERT INTO ${tableName} VALUES (${valuesString});`;
   data.forEach( (ele) => {
     let values=[];
-    row =  Object.values(ele);
+    let row = Object.values(ele);
     row.forEach( rEle => {
       values.push(rEle);
     });//read all the data for that object
     //console.log('BData1', valuesArr);
     client.query(sql,values);
   });
-  console.log('Inserted new data in DB');
+  console.log('Inserted new data in DB - ', tableName);
 };
-//check to see if it time yet
+/*check to see if it time yet
+********************
+*/
 const timeCheck = (tableName,dataCreated) =>{
   //weather API gets called every 30 sec
   const weatherTimeOut = 30* 1000;
+  //events API get called every hour
+  const eventsTimeOut = 60* 60* 1000;
   //movie API gets called every week
   const movieTimeOut = 7 * 24 * 60 * 60* 1000;
   //movie API gets called every hour
@@ -112,14 +143,17 @@ const timeCheck = (tableName,dataCreated) =>{
   if(tableName ==='weather') {
     timeOut = weatherTimeOut;
   }
-  else if(tableName==='movie'){
-    timeOut = movieTimeOut
+  else if(tableName==='events'){
+    timeOut = eventsTimeOut;
+  }
+  else if (tableName === 'movies'){
+    timeOut = movieTimeOut;
   }
   else{
-    timeout = yelpTimeOut;
+    timeOut = yelpTimeOut;
   }
   //
-  console.log(tableName);
+  console.log(tableName, ' - time check');
   console.log(rightNow);
   console.log(dataCreated);
   console.log(timeOut);
@@ -130,6 +164,96 @@ const timeCheck = (tableName,dataCreated) =>{
     return false;
   }
 };
+/*get fresh data, Also!! at ~187 sents the fresh data to DB
+********************
+*/
+const freshData = (tableName,response,locQuery) =>{
+  try{
+    if(tableName === 'location'){
+      let geoCodeURL = `https://maps.googleapis.com/maps/api/geocode/json?address=${locQuery}&key=${process.env.GOOGLE_API}`;
+
+      superagent.get(geoCodeURL)
+        .end( (err, googleAPIresponse) => {
+          let data = googleAPIresponse.body;
+          city = new GEOloc(locQuery, data.results[0].formatted_address, data.results[0].geometry.location.lat, data.results[0].geometry.location.lng);
+          let insertStatement = 'INSERT INTO location ( search_query,formatted_query, latitude, longitude ) VALUES ( $1 , $2, $3, $4);';
+          let insertValues = [ city.search_query, city.formatted_query, city.latitude,city.longitude];
+          client.query(insertStatement,insertValues);
+          response.send(city);
+
+        });
+    }
+    else if(tableName === 'weather'){
+      //get new data
+      let geoCodeURL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${city.latitude},${city.longitude}`;
+      let myForecast;
+      //console.log('newWeather');
+      superagent.get(geoCodeURL).end( (err, googleAPIresponse) => {
+        let data = googleAPIresponse.body;
+        let daily = Object.entries(data)[6];
+        let dailyData = daily[1].data;//hourly day forecast
+        myForecast = dailyData.map(element => {
+          let date = new Date(element.time * 1000).toDateString();
+          return new Forecast(element.summary, date, city.latitude, city.longitude, Date.now());
+        });
+        //update the database with new data
+        enterNewData('weather',myForecast);
+        //send data to front-end
+        response.send(myForecast);
+      });
+    }
+    else if(tableName === 'events'){
+      let geoCodeURL = `https://www.eventbriteapi.com/v3/events/search?location.longitude=${city.longitude}&location.latitude=${city.latitude}&expand=venue`;
+      console.log('Calling superagent in freshData from events');
+
+      superagent.get(geoCodeURL).set('Authorization', `Bearer ${process.env.EVENTBRITE_API_KEY}`)
+        .end( (err, googleAPIresponse) => {
+          console.log('Inside superagent from events');
+          let events = googleAPIresponse.body.events;
+          let resultEvents = events.map(value=>{
+            let name = value.name.text;
+            let link = value.url;
+            let eventDate = new Date(value.start.local).toDateString();
+            let summary = value.summary;
+            return new Event(link,name,eventDate,summary,city.latitude,city.longitude,Date.now());
+          });
+          response.send(resultEvents);
+          enterNewData(tableName,resultEvents);
+        });
+      //console.log('Event- data check: ', data.name);
+    }
+    else if( tableName === 'movies'){
+      let url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${city.search_query}&page=1&include_adult=false`;
+
+      superagent.get(url)
+        .end( (err,movieResponse) => {
+          let data = movieResponse.body.results;
+          let movies = data.map( (ele) => new Movies(ele.title,ele.release_date,ele.vote_count,ele.vote_average,ele.popularity,'https://image.tmdb.org/t/p/w185_and_h278_bestv2'+ele.backdrop_path,ele.overview,city.latitude,city.longitude,Date.now())
+          );
+          response.send(movies);
+          enterNewData(tableName,movies);
+        });//.end of super agent
+    }
+    else if( tableName === 'yelp'){
+      let url = `https://api.yelp.com/v3/businesses/search?location=${city.search_query}`;
+      superagent.get(url).set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+        .end( (err,yelpRes) => {
+          let data = yelpRes.body.businesses;
+          //name,image_url,price,rating,url
+          let yelp = data.map( (ele) => new Yelp(ele.name,ele.image_url,ele.price,ele.rating,ele.url,city.latitude,city.longitude,Date.now()));
+          response.send(yelp);
+          enterNewData(tableName,yelp);
+        });//.end super-agent
+    }
+    console.log('XA');
+  }
+  catch(error){
+    console.log('Error occured at freshData: ', error);
+  }
+};
+/*Front End Function callss
+******
+*/
 //checking to see if the servre is working
 app.get('/', (request, response) => {
   response.send('server works');
@@ -148,20 +272,7 @@ app.get('/location', (request, response) => {
         console.log('my old city', city);
       }
       else{
-        let geoCodeURL = `https://maps.googleapis.com/maps/api/geocode/json?address=${locQuery}&key=${process.env.GOOGLE_API}`;
-
-        superagent.get(geoCodeURL)
-          .end( (err, googleAPIresponse) => {
-            let data = googleAPIresponse.body;
-            city = new GEOloc(locQuery, data.results[0].formatted_address, data.results[0].geometry.location.lat, data.results[0].geometry.location.lng);
-            let insertStatement = 'INSERT INTO location ( search_query,formatted_query, latitude, longitude ) VALUES ( $1 , $2, $3, $4);';
-            let insertValues = [ city.search_query, city.formatted_query, city.latitude,city.longitude];
-            client.query(insertStatement,insertValues);
-            response.send(city);
-            if(err){
-              handleError(err);
-            }
-          });
+        freshData('location',response,locQuery);
       }
     });
 });
@@ -178,52 +289,20 @@ app.get('/weather', (request, response) => {
           if(timeCheck('weather',data.rows[0].created_at)){
             //if it has passed the time frame, get new data from API
             //delete previous data
-            console.log('Deleting old weather DB');
+            console.log('Weather - Deleting old weather DB');
             delRowData('weather');
-            //get new data
-            let geoCodeURL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${city.latitude},${city.longitude}`;
-            let myForecast;
-            //console.log('newWeather');
-            superagent.get(geoCodeURL).end( (err, googleAPIresponse) => {
-              let data = googleAPIresponse.body;
-              let daily = Object.entries(data)[6];
-              let dailyData = daily[1].data;//hourly day forecast
-              myForecast = dailyData.map(element => {
-                let date = new Date(element.time * 1000).toDateString();
-                return new Forecast(element.summary, date, city.latitude, city.longitude, Date.now());
-              });
-              //update the database with new data
-              enterNewData('weather',myForecast);
-              //send data to front-end
-              response.send(myForecast);
-            });
+            freshData('weather',response);
+            console.log('Weather- deleted old data and updated new data');
           }//else we just show values from DB
           else{
             let weather = data.rows.map(ele=> new Forecast(ele.forecast,ele.time,ele.latitude,ele.longitude));
-            //console.log('oldWeather', weather);
+            console.log(' Weather - sending front end data w/in timestamp');
             response.send(weather);
           }//else
         }//if there is no data in DB
         else{
-          console.log('we deleting new db1');
-          let geoCodeURL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${city.latitude},${city.longitude}`;
-          //console.log('newWeather');
-          superagent.get(geoCodeURL).end( (err, googleAPIresponse) => {
-            let data = googleAPIresponse.body;
-            let daily = Object.entries(data)[6];
-            let dailyData = daily[1].data;//hourly day forecast
-            let myForecast = dailyData.map(element => {
-              let date = new Date(element.time * 1000).toDateString();
-              //forecast,time,long,lat,created_time
-              return new Forecast(element.summary, date, city.latitude, city.longitude, Date.now());
-            });
-            myForecast.forEach(ele=> {
-              let insertStatement = 'INSERT INTO weather ( forecast,time,latitude,longitude,created_at) VALUES ($1,$2,$3,$4,$5);';
-              let insertValues = [ele.forecast, ele.time, ele.latitude, ele.longitude, Date.now()];
-              client.query(insertStatement,insertValues);
-            });
-            response.send(myForecast);
-          });
+          console.log('Weather - getting data [No data in DB] ');
+          freshData('weather', response);
         }
       });
   }
@@ -240,36 +319,33 @@ app.get('/events',(request,response)=>{
     client.query(sqlStatement,values)
       .then( (data) =>{
         if( (data.rowCount) > 0){
-          let event = data.rows.map(ele=> new Event(ele.link,ele.eventname,ele.eventdate,ele.summary,ele.longitude,ele.latitude));
-          //console.log('Old Events',event);
-          response.send(event);
+          if(timeCheck('events',data.rows[0].created_at)){
+            //if time has passed deleted and get fresh data and insert in DB
+            console.log('Events - data in db, Del cal, data past time stamp;');
+            delRowData('events');
+            //fresh Data
+            freshData('events',response);
+            console.log('Events Update w/ new timeStamp-');
+          }
+          else{
+            //just show the data from DB
+            console.log('Events - data in db, data w/in time stamp;');
+            let event = data.rows.map(ele=> new Event(ele.link,ele.eventname,ele.eventdate,ele.summary,ele.latitude,ele.longitude));
+            //console.log('Old Events',event);
+            response.send(event);
+          }
         }
+        //if no data in DB
         else{
-          let geoCodeURL = `https://www.eventbriteapi.com/v3/events/search?location.longitude=${city.longitude}&location.latitude=${city.latitude}&expand=venue`;
-
-          superagent.get(geoCodeURL).set('Authorization', `Bearer ${process.env.EVENTBRITE_API_KEY}`)
-            .end( (err, googleAPIresponse) => {
-              let events = googleAPIresponse.body.events;
-              let resultEvents = events.map(value=>{
-                let name = value.name.text;
-                let link = value.url;
-                let eventDate = new Date(value.start.local).toDateString();
-                let summary = value.summary;
-                return new Event(link,name,eventDate,summary,city.longitude,city.latitude);
-              });
-              //console.log('New events', resultEvents);
-              resultEvents.forEach( ele=> {
-                let insertStatement = 'INSERT INTO events (link, eventName, eventDate,summary,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6);';
-                let insertValues = [ele.link,ele.name,ele.event_date,ele.summary,ele.latitude,ele.longitude];
-                client.query(insertStatement,insertValues);
-              });
-              response.send(resultEvents);
-            });
+          //get new data
+          console.log('Calling fresh data [no data in db ] - eventBrite');
+          freshData('events',response);
+          console.log('Events Inital call-');
         }
       });
   }
   catch(error){
-    response.send(error);
+    console.log('Error occured on /events ', error);
   }
 });
 //Movie DB
@@ -279,30 +355,29 @@ app.get('/movies',(request,response) =>{
     let values = [city.latitude,city.longitude];
     client.query(sqlStatement,values)
       .then( (data) =>{
-        if(data.rows > 0 ){
-          // Data coming from DB: title, released_on,total_votes,average_votes,popularity, img_url,overview
-          let movies = data.rows.map(ele=> new Event(ele.title,ele.released_on,ele.total_votes,ele.average_votes,ele.popularity,ele.image_url,ele.overview));
-          //console.log('Old Events',event);
-          response.send(movies);
+        if(data.rowCount > 0 ){
+          if(timeCheck('movies', data.rows[0].created_at)){
+            //if time has passed deleted and get fresh data and insert in DB
+            console.log('Movies - data in db, Del cal, data past time stamp;');
+            delRowData('movies');
+            //fresh Data ( gets fresh data and also enters them in DB)
+            freshData('movies',response);
+            console.log('Movies Update w/ new timeStamp-');
+          }
+          // data within the time stamp
+          else{
+            // title, released_on,total_votes,average_votes,popularity, image_url,overview
+            let movies = data.rows.map(ele=> new Movies(ele.title,ele.released_on,ele.total_votes,ele.average_votes,ele.popularity,ele.image_url,ele.overview));
+            console.log('Movies- Sending Response to Front with data from DB');
+            response.send(movies);
+          }
         }
+        //if no data in DB
         else{
-          let url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${city.search_query}&page=1&include_adult=false`;
-
-          superagent.get(url)
-            .end( (err,movieResponse) => {
-              let data = movieResponse.body.results;
-              let movies = data.map( (ele) => new Movies(ele.title,ele.release_date,ele.vote_count,ele.vote_average,ele.popularity,'https://image.tmdb.org/t/p/w185_and_h278_bestv2'+ele.backdrop_path,ele.overview)
-              );
-              //console.log(movies);
-              //putting data in DB
-              movies.forEach( ele=> {
-                // Data going from DB: title, released_on, total_votes, average_votes, popularity, image_url, overview, latitude, longitude
-                let insertStatement = 'INSERT INTO movies (title, released_on, total_votes, average_votes,popularity, image_url,overview, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);';
-                let insertValues = [ele.title, ele.released_on, ele.total_votes, ele.average_votes,ele.popularity, ele.image_url, ele.overview, city.latitude, city.longitude];
-                client.query(insertStatement,insertValues);
-              });//forEach to insert into db
-              response.send(movies);
-            });//.end of super agent
+          //get new data
+          console.log('Calling fresh data [no data in db ] - eventBrite');
+          freshData('movies',response);
+          console.log('Events Inital call complete');
         }// else no data then we inserting into DB
       }); // .then after the query
   }//try end
@@ -318,30 +393,22 @@ app.get('/yelp', (request,response) => {
     let values = [city.latitude,city.longitude];
     client.query(sqlStatement,values)
       .then( (data) =>{
-        if(data.rows > 0 ){
-          //name,image_url,price,rating,url
-          let yelp = data.rows.map(ele=> new Yelp(ele.name, ele.image_url, ele.price, ele.rating,ele.url));
-          //console.log('Old Events',event);
-          response.send(yelp);
+        if(data.rowCount > 0 ){
+          if(timeCheck('yelp', data.rows[0].created_at)){
+            delRowData('yelp');
+            freshData('yelp',response);
+          }
+          else{
+            //name,image_url,price,rating,url
+            let yelp = data.rows.map(ele=> new Yelp(ele.name, ele.image_url, ele.price, ele.rating,ele.url));
+            console.log(' Yelp sending front end data w/in time stamp');
+            response.send(yelp);
+          }
         }//if data
         else{
-          let url = `https://api.yelp.com/v3/businesses/search?location=${city.search_query}`;
-          superagent.get(url).set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
-            .end( (err,yelpRes) => {
-              let data = yelpRes.body.businesses;
-              //name,image_url,price,rating,url
-              let yelp = data.map( (ele) => new Yelp(ele.name,ele.image_url,ele.price,ele.rating,ele.url));
-              //console.log('Going Front END: ',yelp);
-              //putting data in DB
-              yelp.forEach( ele=> {
-                // Data going from DB://name,image_url,price,rating,url, lat, long
-                let insertStatement = 'INSERT INTO yelp (name, image_url, price, rating, url,latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7);';
-                let insertValues = [ele.name, ele.image_url, ele.price, ele.rating, ele.url, city.latitude, city.longitude];
-                client.query(insertStatement,insertValues);
-              });//forEach to insert into db
-              response.send(yelp);
-            });//.end super-agent
-          //name,image_url,price,rating,url
+          console.log('Yelp - Calling fresh data [no data in db ] -');
+          freshData('yelp',response);
+          console.log('Yelp Inital call complete');
         }//no data in DB
       });//.then from query
   }//try end
